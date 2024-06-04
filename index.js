@@ -1,14 +1,22 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv, { parse } from 'dotenv';
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
+import dotenv from 'dotenv';
 dotenv.config();
-import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 const app = express();
 const port = process.env.PORT || 5000;
 
 //middleware
-app.use(cors());
+app.use(cors({
+    origin: [
+        "http://localhost:5173",
+    ],
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xyqwep0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -30,6 +38,58 @@ async function run() {
         const biodataCollection = database.collection("biodatas");
         const favoriteCollection = database.collection("favorites");
         const userCollection = database.collection("users");
+
+        // my middlewares
+        const verifyToken = async (req, res, next) => {
+            const token = req.cookies?.token;
+            console.log('Verifying token', token);
+            if (!token) {
+                return res.status(401).send({ message: 'Not authorized' });
+            }
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) {
+                    console.log(err);
+                    return res.status(401).send({ message: 'Not authorized' });
+                }
+                req.user = decoded;
+                console.log(decoded);
+                next();
+            })
+
+        };
+
+        // admin check middleware
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.user?.email;
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const isAdmin = user?.role === "admin";
+            console.log({ isAdmin: isAdmin });
+            console.log("check email", email);
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'Forbidden' });
+            }
+            next();
+        };
+
+        //jwt auth
+        app.post("/jwt", async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
+            res
+                .cookie("token", token, {
+                    httpOnly: true,
+                    secure: false, // TODO: "true" on production
+                    // sameSite: "none",
+                })
+                .send({ success: true });
+        });
+
+        app.get("/logout", async (req, res) => {
+            res.clearCookie("token")
+                .send({ success: true });
+        });
 
         // biodata collection
         app.get("/biodatas", async (req, res) => {
@@ -254,7 +314,7 @@ async function run() {
         });
 
         // user collection
-        app.get("/users",  async (req, res) => {
+        app.get("/users", async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
         });
@@ -271,6 +331,31 @@ async function run() {
                 }
             };
             const result = await userCollection.updateOne(filter, UpdatedUser, options);
+            res.send(result);
+        });
+
+        app.get("/users/admin/:email", verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (req.user?.email !== email) {
+                return res.status(403).send({ message: 'Forbidden' });
+            }
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const admin = user.role === "admin";
+
+            res.send({ admin });
+        });
+
+        app.patch("/users/admin", verifyToken, verifyAdmin, async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const filter = { email: user.email };
+            const UpdatedUser = {
+                $set: {
+                    role: user.role,
+                }
+            };
+            const result = await userCollection.updateOne(filter, UpdatedUser);
             res.send(result);
         });
 
