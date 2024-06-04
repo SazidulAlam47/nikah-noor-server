@@ -11,7 +11,7 @@ const port = process.env.PORT || 5000;
 //middleware
 app.use(cors({
     origin: [
-        "http://localhost:5173",
+        "http://localhost:5173", // TODO: add production url
     ],
     credentials: true
 }));
@@ -32,7 +32,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server (optional starting in v4.7)
-        await client.connect();
+        await client.connect(); // TODO: disable on production
 
         const database = client.db("nikahNoorDB");
         const biodataCollection = database.collection("biodatas");
@@ -151,35 +151,23 @@ async function run() {
             res.send(result);
         });
 
-        app.get("/biodatas/:biodataId", async (req, res) => {
+        // TODO : check premium and don't send email and phone numbers
+        app.get("/biodatas/:biodataId", verifyToken, async (req, res) => {
             const biodataId = parseInt(req.params.biodataId);
             const query = { biodataId: biodataId };
             const result = await biodataCollection.findOne(query);
             res.send(result);
         });
 
-        app.get("/biodatas/email/:email", async (req, res) => {
+        // TODO : check premium and don't send email and phone numbers
+        app.get("/biodatas/email/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { contactEmail: email };
             const result = await biodataCollection.findOne(query);
             res.send(result);
         });
 
-        app.get("/biodatasPremium", async (req, res) => {
-            const query = { premium: "Pending" };
-            const options = {
-                projection: {
-                    biodataId: 1,
-                    _id: 0,
-                    name: 1,
-                    contactEmail: 1
-                },
-            };
-            const result = await biodataCollection.find(query, options).toArray();
-            res.send(result);
-        });
-
-        app.put("/biodatas/:email", async (req, res) => {
+        app.put("/biodatas/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             const biodata = req.body;
             console.log({ email, biodata });
@@ -232,23 +220,8 @@ async function run() {
             res.send(result);
         });
 
-        // make user premium
-        app.patch("/biodatas/:biodataId", async (req, res) => {
-            const biodataId = parseInt(req.params.biodataId);
-            const biodata = req.body;
-            console.log(biodataId, biodata);
-            const filter = { biodataId: biodataId };
-            const UpdatedBiodata = {
-                $set: {
-                    premium: biodata.premium,
-                }
-            };
-            const result = await biodataCollection.updateOne(filter, UpdatedBiodata);
-            res.send(result);
-        });
-
         // favorite collection
-        app.post("/favorites", async (req, res) => {
+        app.post("/favorites", verifyToken, async (req, res) => {
             const favorite = req.body;
             const newFavoriteId = favorite.favoriteId;
 
@@ -269,7 +242,7 @@ async function run() {
             res.send(result);
         });
 
-        app.get("/favorites/email/:email", async (req, res) => {
+        app.get("/favorites/email/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
 
             const result = await favoriteCollection.aggregate([
@@ -306,7 +279,7 @@ async function run() {
             res.send(result);
         });
 
-        app.delete("/favorites/:id", async (req, res) => {
+        app.delete("/favorites/:id", verifyToken, async (req, res) => {
             const id = parseInt(req.params.id);
             const query = { favoriteId: id };
             const result = await favoriteCollection.deleteOne(query);
@@ -314,12 +287,12 @@ async function run() {
         });
 
         // user collection
-        app.get("/users", async (req, res) => {
+        app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
             const result = await userCollection.find().toArray();
             res.send(result);
         });
 
-        app.put("/users", async (req, res) => {
+        app.put("/users", verifyToken, async (req, res) => {
             const user = req.body;
             console.log(user);
             const filter = { email: user.email };
@@ -346,23 +319,86 @@ async function run() {
             res.send({ admin });
         });
 
+        // make user premium request
+        app.get("/users/premiumReq/:email", verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const biodata = req.body;
+            console.log(email, biodata);
+            const filter = { email: email };
+            const UpdatedBiodata = {
+                $set: {
+                    premium: "Pending",
+                }
+            };
+            const result = await userCollection.updateOne(filter, UpdatedBiodata);
+            res.send(result);
+        });
+
+        // make user premium
+        app.get("/users/makePremium/:email", verifyToken, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const biodata = req.body;
+            console.log(email, biodata);
+            const filter = { email: email };
+            const UpdatedBiodata = {
+                $set: {
+                    premium: "Approved",
+                }
+            };
+            const result = await userCollection.updateOne(filter, UpdatedBiodata);
+            res.send(result);
+        });
+
+        // make user admin
         app.patch("/users/admin", verifyToken, verifyAdmin, async (req, res) => {
             const user = req.body;
             console.log(user);
             const filter = { email: user.email };
             const UpdatedUser = {
                 $set: {
-                    role: user.role,
+                    role: "admin",
                 }
             };
             const result = await userCollection.updateOne(filter, UpdatedUser);
             res.send(result);
         });
 
+        // check premium pending requests
+        app.get("/usersPremium", verifyToken, verifyAdmin, async (req, res) => {
+            const result = await userCollection.aggregate([
+                {
+                    $match: {
+                        premium: "Pending"
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "biodatas",
+                        localField: "email",
+                        foreignField: "contactEmail",
+                        as: "biodata"
+                    }
+                },
+                {
+                    $unwind: "$biodata"
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        biodataId: "$biodata.biodataId",
+                        name: "$name",
+                        email: "$email",
+                    }
+                }
+            ]).toArray();
+
+            res.send(result);
+        });
+
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
+        await client.db("admin").command({ ping: 1 }); // TODO: disable on production
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
