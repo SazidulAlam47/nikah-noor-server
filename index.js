@@ -30,20 +30,6 @@ async function run() {
         const biodataCollection = database.collection("biodatas");
         const favoriteCollection = database.collection("favorites");
 
-
-        const getLastBiodataId = async () => {
-            const lastQuery = {};
-            const lastOptions = {
-                projection: { biodataId: 1, _id: 0 },
-            };
-            const lastIdObj = await biodataCollection.find(lastQuery, lastOptions).sort({ biodataId: -1 }).limit(1).toArray();
-            const lastBiodataId = lastIdObj[0].biodataId;
-
-            return lastBiodataId;
-        };
-
-
-
         // biodata collection
         app.put("/biodatas/:email", async (req, res) => {
             const email = req.params.email;
@@ -103,7 +89,50 @@ async function run() {
         });
 
         app.get("/biodatas", async (req, res) => {
-            const result = await biodataCollection.find().toArray();
+            const query = {};
+            const options = {
+                projection: {
+                    biodataId: 1,
+                    _id: 0,
+                    name: 1,
+                    biodataType: 1,
+                    profileImage: 1,
+                    age: 1,
+                    occupation: 1,
+                    permanentDivision: 1
+                },
+            };
+            const result = await biodataCollection.find(query, options).toArray();
+            res.send(result);
+        });
+
+        app.get("/biodatasWithType", async (req, res) => {
+            const type = req.query.type;
+            const count = req.query.count;
+            const result = await biodataCollection.aggregate([
+                {
+                    $match: {
+                        biodataType: type
+                    }
+                },
+                {
+                    $sample: {
+                        size: parseInt(count)
+                    }
+                },
+                {
+                    $project: {
+                        biodataId: 1,
+                        _id: 0,
+                        name: 1,
+                        biodataType: 1,
+                        profileImage: 1,
+                        age: 1,
+                        occupation: 1,
+                        permanentDivision: 1
+                    }
+                }
+            ]).toArray();
             res.send(result);
         });
 
