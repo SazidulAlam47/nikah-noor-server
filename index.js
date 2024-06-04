@@ -180,6 +180,13 @@ async function run() {
             res.send(result);
         });
 
+        app.delete("/favorites/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { favoriteId: parseInt(id) };
+            const result = await favoriteCollection.deleteOne(query);
+            res.send(result);
+        });
+
 
 
         // Send a ping to confirm a successful connection
