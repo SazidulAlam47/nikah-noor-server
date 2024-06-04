@@ -108,16 +108,18 @@ async function run() {
 
         app.get("/biodatasWithType", async (req, res) => {
             const type = req.query.type;
-            const count = req.query.count;
+            const count = parseInt(req.query.count);
+            const biodataIdToSkip = parseInt(req.query.skip);
             const result = await biodataCollection.aggregate([
                 {
                     $match: {
-                        biodataType: type
+                        biodataType: type,
+                        biodataId: { $ne: biodataIdToSkip }
                     }
                 },
                 {
                     $sample: {
-                        size: parseInt(count)
+                        size: count
                     }
                 },
                 {
