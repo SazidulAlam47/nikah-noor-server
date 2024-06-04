@@ -145,12 +145,37 @@ async function run() {
 
         app.get("/favorites/email/:email", async (req, res) => {
             const email = req.params.email;
-            const query = { email: email };
-            const options = {
-                projection: { favoriteId: 1, _id: 0 },
-            };
 
-            const result = await favoriteCollection.find(query, options).toArray();
+            const result = await favoriteCollection.aggregate([
+                {
+                    $match: { email: email }
+                },
+                {
+                    $project: { favoriteId: 1, _id: 0 }
+                },
+                {
+                    $lookup: {
+                        from: "biodatas",
+                        localField: "favoriteId",
+                        foreignField: "biodataId",
+                        as: "biodata"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$biodata",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $project: {
+                        biodataId: "$biodata.biodataId",
+                        name: "$biodata.name",
+                        permanentDivision: "$biodata.permanentDivision",
+                        occupation: "$biodata.occupation",
+                    }
+                }
+            ]).toArray();
 
             res.send(result);
         });
