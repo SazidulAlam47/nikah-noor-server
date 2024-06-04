@@ -28,6 +28,7 @@ async function run() {
 
         const database = client.db("nikahNoorDB");
         const biodataCollection = database.collection("biodatas");
+        const favoriteCollection = database.collection("favorites");
 
 
         const getLastBiodataId = async () => {
@@ -119,6 +120,41 @@ async function run() {
             const result = await biodataCollection.findOne(query);
             res.send(result);
         });
+
+        // favorite connection
+        app.post("/favorites", async (req, res) => {
+            const favorite = req.body;
+            const newFavoriteId = favorite.favoriteId;
+
+            //check already exists in the favorites
+            const query = { email: favorite.email };
+            const options = {
+                projection: { favoriteId: 1, _id: 0 },
+            };
+            const userFavoritesObj = await favoriteCollection.find(query, options).toArray();
+            const userOldFavoritesArray = userFavoritesObj.map(obj => obj.favoriteId);
+
+            if (userOldFavoritesArray.indexOf(newFavoriteId) !== -1) {
+                return res.send({ exists: true });
+            }
+
+            // add to favorites
+            const result = await favoriteCollection.insertOne(favorite);
+            res.send(result);
+        });
+
+        app.get("/favorites/email/:email", async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const options = {
+                projection: { favoriteId: 1, _id: 0 },
+            };
+
+            const result = await favoriteCollection.find(query, options).toArray();
+
+            res.send(result);
+        });
+
 
 
         // Send a ping to confirm a successful connection
