@@ -88,6 +88,21 @@ async function run() {
             res.send(result);
         });
 
+        // make premium
+        app.patch("/biodatas/:biodataId", async (req, res) => {
+            const biodataId = parseInt(req.params.biodataId);
+            const biodata = req.body;
+            console.log(biodataId, biodata);
+            const filter = { biodataId: biodataId };
+            const UpdatedBiodata = {
+                $set: {
+                    premium: biodata.premium,
+                }
+            };
+            const result = await biodataCollection.updateOne(filter, UpdatedBiodata);
+            res.send(result);
+        });
+
         app.get("/biodatas", async (req, res) => {
             const biodataType = req.query?.biodataType;
             const permanentDivision = req.query?.permanentDivision;
@@ -98,8 +113,6 @@ async function run() {
             if (biodataType) query.biodataType = biodataType;
             if (permanentDivision) query.permanentDivision = permanentDivision;
             if (ageFrom && ageTo) query.age = { $gte: ageFrom, $lte: ageTo };
-
-            console.log(query);
 
             const options = {
                 projection: {
@@ -149,11 +162,9 @@ async function run() {
             res.send(result);
         });
 
-
-
         app.get("/biodatas/:biodataId", async (req, res) => {
-            const biodataId = req.params.biodataId;
-            const query = { biodataId: parseInt(biodataId) };
+            const biodataId = parseInt(req.params.biodataId);
+            const query = { biodataId: biodataId };
             const result = await biodataCollection.findOne(query);
             res.send(result);
         });
@@ -162,6 +173,20 @@ async function run() {
             const email = req.params.email;
             const query = { contactEmail: email };
             const result = await biodataCollection.findOne(query);
+            res.send(result);
+        });
+
+        app.get("/biodatasPremium", async (req, res) => {
+            const query = { premium: "Pending" };
+            const options = {
+                projection: {
+                    biodataId: 1,
+                    _id: 0,
+                    name: 1,
+                    contactEmail: 1
+                },
+            };
+            const result = await biodataCollection.find(query, options).toArray();
             res.send(result);
         });
 
@@ -225,8 +250,8 @@ async function run() {
         });
 
         app.delete("/favorites/:id", async (req, res) => {
-            const id = req.params.id;
-            const query = { favoriteId: parseInt(id) };
+            const id = parseInt(req.params.id);
+            const query = { favoriteId: id };
             const result = await favoriteCollection.deleteOne(query);
             res.send(result);
         });
