@@ -29,80 +29,9 @@ async function run() {
         const database = client.db("nikahNoorDB");
         const biodataCollection = database.collection("biodatas");
         const favoriteCollection = database.collection("favorites");
+        const userCollection = database.collection("users");
 
         // biodata collection
-        app.put("/biodatas/:email", async (req, res) => {
-            const email = req.params.email;
-            const biodata = req.body;
-            console.log({ email, biodata });
-
-            // check if the user is already have biodata
-            const UserQuery = { contactEmail: email };
-            const userOptions = {
-                projection: { biodataId: 1, _id: 0 },
-            };
-            const userBioIdObj = await biodataCollection.findOne(UserQuery, userOptions);
-            let userBiodataId = userBioIdObj?.biodataId;
-
-            console.log({ oldBioId: userBiodataId });
-
-            // if user don't have biodata then give him new biodataId
-            if (!userBiodataId) {
-                const lastQuery = {};
-                const lastOptions = {
-                    projection: { biodataId: 1, _id: 0 },
-                };
-                const lastIdObj = await biodataCollection.find(lastQuery, lastOptions).sort({ biodataId: -1 }).limit(1).toArray();
-                userBiodataId = lastIdObj[0].biodataId + 1;
-            }
-
-            console.log({ newBioId: userBiodataId });
-
-            // update biodata
-            const filter = { contactEmail: email };
-            const options = { upsert: true };
-            const UpdatedBiodata = {
-                $set: {
-                    biodataId: userBiodataId,
-                    biodataType: biodata.biodataType,
-                    name: biodata.name,
-                    profileImage: biodata.profileImage,
-                    dateOfBirth: biodata.dateOfBirth,
-                    height: biodata.height,
-                    weight: biodata.weight,
-                    age: biodata.age,
-                    occupation: biodata.occupation,
-                    race: biodata.race,
-                    fathersName: biodata.fathersName,
-                    mothersName: biodata.mothersName,
-                    permanentDivision: biodata.permanentDivision,
-                    presentDivision: biodata.presentDivision,
-                    expectedPartnerAge: biodata.expectedPartnerAge,
-                    expectedPartnerHeight: biodata.expectedPartnerHeight,
-                    expectedPartnerWeight: biodata.expectedPartnerWeight,
-                    contactEmail: biodata.contactEmail,
-                    mobileNumber: biodata.mobileNumber,
-                }
-            };
-            const result = await biodataCollection.updateOne(filter, UpdatedBiodata, options);
-            res.send(result);
-        });
-
-        // make premium
-        app.patch("/biodatas/:biodataId", async (req, res) => {
-            const biodataId = parseInt(req.params.biodataId);
-            const biodata = req.body;
-            console.log(biodataId, biodata);
-            const filter = { biodataId: biodataId };
-            const UpdatedBiodata = {
-                $set: {
-                    premium: biodata.premium,
-                }
-            };
-            const result = await biodataCollection.updateOne(filter, UpdatedBiodata);
-            res.send(result);
-        });
-
         app.get("/biodatas", async (req, res) => {
             const biodataType = req.query?.biodataType;
             const permanentDivision = req.query?.permanentDivision;
@@ -190,7 +119,75 @@ async function run() {
             res.send(result);
         });
 
-        // favorite connection
+        app.put("/biodatas/:email", async (req, res) => {
+            const email = req.params.email;
+            const biodata = req.body;
+            console.log({ email, biodata });
+
+            // check if the user is already have biodata
+            const UserQuery = { contactEmail: email };
+            const userOptions = {
+                projection: { biodataId: 1, _id: 0 },
+            };
+            const userBioIdObj = await biodataCollection.findOne(UserQuery, userOptions);
+            let userBiodataId = userBioIdObj?.biodataId;
+
+            // if user don't have biodata then give him new biodataId
+            if (!userBiodataId) {
+                const lastQuery = {};
+                const lastOptions = {
+                    projection: { biodataId: 1, _id: 0 },
+                };
+                const lastIdObj = await biodataCollection.find(lastQuery, lastOptions).sort({ biodataId: -1 }).limit(1).toArray();
+                userBiodataId = lastIdObj[0].biodataId + 1;
+            }
+
+            // update biodata
+            const filter = { contactEmail: email };
+            const options = { upsert: true };
+            const UpdatedBiodata = {
+                $set: {
+                    biodataId: userBiodataId,
+                    biodataType: biodata.biodataType,
+                    name: biodata.name,
+                    profileImage: biodata.profileImage,
+                    dateOfBirth: biodata.dateOfBirth,
+                    height: biodata.height,
+                    weight: biodata.weight,
+                    age: biodata.age,
+                    occupation: biodata.occupation,
+                    race: biodata.race,
+                    fathersName: biodata.fathersName,
+                    mothersName: biodata.mothersName,
+                    permanentDivision: biodata.permanentDivision,
+                    presentDivision: biodata.presentDivision,
+                    expectedPartnerAge: biodata.expectedPartnerAge,
+                    expectedPartnerHeight: biodata.expectedPartnerHeight,
+                    expectedPartnerWeight: biodata.expectedPartnerWeight,
+                    contactEmail: biodata.contactEmail,
+                    mobileNumber: biodata.mobileNumber,
+                }
+            };
+            const result = await biodataCollection.updateOne(filter, UpdatedBiodata, options);
+            res.send(result);
+        });
+
+        // make user premium
+        app.patch("/biodatas/:biodataId", async (req, res) => {
+            const biodataId = parseInt(req.params.biodataId);
+            const biodata = req.body;
+            console.log(biodataId, biodata);
+            const filter = { biodataId: biodataId };
+            const UpdatedBiodata = {
+                $set: {
+                    premium: biodata.premium,
+                }
+            };
+            const result = await biodataCollection.updateOne(filter, UpdatedBiodata);
+            res.send(result);
+        });
+
+        // favorite collection
         app.post("/favorites", async (req, res) => {
             const favorite = req.body;
             const newFavoriteId = favorite.favoriteId;
@@ -253,6 +250,27 @@ async function run() {
             const id = parseInt(req.params.id);
             const query = { favoriteId: id };
             const result = await favoriteCollection.deleteOne(query);
+            res.send(result);
+        });
+
+        // user collection
+        app.get("/users",  async (req, res) => {
+            const result = await userCollection.find().toArray();
+            res.send(result);
+        });
+
+        app.put("/users", async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const filter = { email: user.email };
+            const options = { upsert: true };
+            const UpdatedUser = {
+                $set: {
+                    name: user.name,
+                    email: user.email,
+                }
+            };
+            const result = await userCollection.updateOne(filter, UpdatedUser, options);
             res.send(result);
         });
 
