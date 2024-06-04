@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import dotenv, { parse } from 'dotenv';
 dotenv.config();
 import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
 const app = express();
@@ -89,7 +89,18 @@ async function run() {
         });
 
         app.get("/biodatas", async (req, res) => {
+            const biodataType = req.query?.biodataType;
+            const permanentDivision = req.query?.permanentDivision;
+            const ageFrom = parseInt(req.query?.from);
+            const ageTo = parseInt(req.query?.to);
+
             const query = {};
+            if (biodataType) query.biodataType = biodataType;
+            if (permanentDivision) query.permanentDivision = permanentDivision;
+            if (ageFrom && ageTo) query.age = { $gte: ageFrom, $lte: ageTo };
+
+            console.log(query);
+
             const options = {
                 projection: {
                     biodataId: 1,
@@ -106,7 +117,7 @@ async function run() {
             res.send(result);
         });
 
-        app.get("/biodatasWithType", async (req, res) => {
+        app.get("/biodatasSidebar", async (req, res) => {
             const type = req.query.type;
             const count = parseInt(req.query.count);
             const biodataIdToSkip = parseInt(req.query.skip);
@@ -137,6 +148,8 @@ async function run() {
             ]).toArray();
             res.send(result);
         });
+
+
 
         app.get("/biodatas/:biodataId", async (req, res) => {
             const biodataId = req.params.biodataId;
