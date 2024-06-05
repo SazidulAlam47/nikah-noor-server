@@ -87,7 +87,7 @@ async function run() {
                 .cookie("token", token, {
                     httpOnly: true,
                     secure: false, // TODO: "true" on production
-                    // sameSite: "none",
+                    // sameSite: "none", // TODO: uncomment on production
                 })
                 .send({ success: true });
         });
@@ -598,6 +598,13 @@ async function run() {
         // review collection
         app.get("/reviews", async (req, res) => {
             const result = await reviewCollection.find().toArray();
+            res.send(result);
+        });
+
+        app.post("/reviews", verifyToken, async (req, res) => {
+            const review = req.body;
+            console.log(review);
+            const result = await reviewCollection.insertOne(review);
             res.send(result);
         });
 
