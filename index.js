@@ -15,7 +15,8 @@ const port = process.env.PORT || 5000;
 //middleware
 app.use(cors({
     origin: [
-        "http://localhost:5173", // TODO: add production url
+        // "http://localhost:5173", // TODO: add production url
+        "https://nikah-noor-client.vercel.app/"
     ],
     credentials: true
 }));
@@ -86,8 +87,8 @@ async function run() {
             res
                 .cookie("token", token, {
                     httpOnly: true,
-                    secure: false, // TODO: "true" on production
-                    // sameSite: "none", // TODO: uncomment on production
+                    secure: true, // TODO: "true" on production
+                    sameSite: "none", // TODO: uncomment on production
                 })
                 .send({ success: true });
         });
@@ -684,8 +685,8 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 }); // TODO: disable on production
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 }); // TODO: disable on production
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
