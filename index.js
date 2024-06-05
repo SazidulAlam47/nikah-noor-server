@@ -560,10 +560,17 @@ async function run() {
             res.send(result);
         });
 
-        app.get("/payments/:id", verifyToken, async (req, res) => {
+        app.get("/payments/exist/:biodataId", verifyToken, async (req, res) => {
+            const biodataId = parseInt(req.params.biodataId);
+            const email = req.user?.email;
+            const query = { email: email };
 
+            const response = await paymentCollection.find(query).toArray();
+            const reqIds = response?.map(req => req.contactRequestId);
 
-            res.send({});
+            const exist = reqIds.includes(biodataId);
+
+            res.send({ exist });
         });
 
         // approve request
