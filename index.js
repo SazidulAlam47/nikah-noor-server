@@ -4,6 +4,10 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import dotenv from 'dotenv';
 dotenv.config();
+// stripe
+import Stripe from 'stripe';
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// mongodb
 import { MongoClient, ServerApiVersion } from 'mongodb';
 const app = express();
 const port = process.env.PORT || 5000;
@@ -39,6 +43,7 @@ async function run() {
         const favoriteCollection = database.collection("favorites");
         const userCollection = database.collection("users");
         const reviewCollection = database.collection("reviews");
+        const paymentCollection = database.collection("payments");
 
         // my middlewares
         const verifyToken = async (req, res, next) => {
@@ -452,10 +457,40 @@ async function run() {
             res.send(result);
         });
 
+        app.post("/payments", verifyToken, async (req, res) => {
+            const payment = req.body;
+            console.log(payment);
+            const result = await paymentCollection.insertOne(payment);
+            res.send(result);
+        });
+
+        app.get("/payments", verifyToken, verifyAdmin, async (req, res) => {
+            const result = await paymentCollection.find().toArray();
+            res.send(result);
+        });
+
         // review collection
         app.get("/reviews", async (req, res) => {
             const result = await reviewCollection.find().toArray();
             res.send(result);
+        });
+
+        app.get("/public-stats", async (req, res) => {
+            const totalBiodata = await biodataCollection.estimatedDocumentCount();
+            const maleBiodata = await biodataCollection.countDocuments({ biodataType: "Male" });
+            const femaleBiodata = await biodataCollection.countDocuments({ biodataType: "Female" });
+            const totalReview = await reviewCollection.estimatedDocumentCount();
+            res.send({ totalBiodata, maleBiodata, femaleBiodata, totalReview });
+        });
+
+        app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
+            const totalBiodata = await biodataCollection.estimatedDocumentCount();
+            const maleBiodata = await biodataCollection.countDocuments({ biodataType: "Male" });
+            const femaleBiodata = await biodataCollection.countDocuments({ biodataType: "Female" });
+            const premiumBiodata = await userCollection.countDocuments({ premium: "Approved" });
+            const totalReview = await reviewCollection.estimatedDocumentCount();
+            //TODO: Revenue
+            res.send({ totalBiodata, maleBiodata, femaleBiodata, premiumBiodata, totalReview });
         });
 
 
