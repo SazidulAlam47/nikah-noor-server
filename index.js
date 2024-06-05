@@ -99,6 +99,9 @@ async function run() {
             const ageFrom = parseInt(req.query?.from);
             const ageTo = parseInt(req.query?.to);
 
+            const page = parseInt(req.query?.page);
+            const size = parseInt(req.query?.size);
+
             const query = {};
             if (biodataType) query.biodataType = biodataType;
             if (permanentDivision) query.permanentDivision = permanentDivision;
@@ -116,8 +119,23 @@ async function run() {
                     permanentDivision: 1
                 },
             };
-            const result = await biodataCollection.find(query, options).toArray();
+            const result = await biodataCollection.find(query, options).skip(page * size).limit(size).toArray();
             res.send(result);
+        });
+
+        app.get("/biodatasCount", async (req, res) => {
+            const biodataType = req.query?.biodataType;
+            const permanentDivision = req.query?.permanentDivision;
+            const ageFrom = parseInt(req.query?.from);
+            const ageTo = parseInt(req.query?.to);
+
+            const query = {};
+            if (biodataType) query.biodataType = biodataType;
+            if (permanentDivision) query.permanentDivision = permanentDivision;
+            if (ageFrom && ageTo) query.age = { $gte: ageFrom, $lte: ageTo };
+
+            const count = await biodataCollection.countDocuments(query);
+            res.send({ count });
         });
 
         app.get("/biodatasSidebar", async (req, res) => {
