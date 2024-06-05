@@ -38,6 +38,7 @@ async function run() {
         const biodataCollection = database.collection("biodatas");
         const favoriteCollection = database.collection("favorites");
         const userCollection = database.collection("users");
+        const reviewCollection = database.collection("reviews");
 
         // my middlewares
         const verifyToken = async (req, res, next) => {
@@ -307,6 +308,7 @@ async function run() {
             res.send(result);
         });
 
+        // check user admin
         app.get("/users/admin/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
             if (req.user?.email !== email) {
@@ -314,9 +316,22 @@ async function run() {
             }
             const query = { email: email };
             const user = await userCollection.findOne(query);
-            const admin = user.role === "admin";
+            const admin = user?.role === "admin";
 
             res.send({ admin });
+        });
+
+        // check user premium
+        app.get("/users/premium/:email", verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (req.user?.email !== email) {
+                return res.status(403).send({ message: 'Forbidden' });
+            }
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const premium = user?.premium === "Approved";
+
+            res.send({ premium });
         });
 
         // make user premium request
@@ -361,6 +376,84 @@ async function run() {
             };
             const result = await userCollection.updateOne(filter, UpdatedUser);
             res.send(result);
+        });
+
+        // update user name
+        app.patch("/users", verifyToken, async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const filter = { email: user.email };
+            const UpdatedUser = {
+                $set: {
+                    name: user.name,
+                }
+            };
+            const result = await userCollection.updateOne(filter, UpdatedUser);
+            res.send(result);
+        });
+
+        // get 6 random premium users
+        app.get("/premiums", async (req, res) => {
+            const count = parseInt(req.query.count);
+
+            const result = await userCollection.aggregate([
+                {
+                    $match: {
+                        premium: "Approved"
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "biodatas",
+                        localField: "email",
+                        foreignField: "contactEmail",
+                        as: "biodata"
+                    }
+                },
+                {
+                    $unwind: "$biodata"
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        profileImage: "$biodata.profileImage",
+                        biodataId: "$biodata.biodataId",
+                        biodataType: "$biodata.biodataType",
+                        age: "$biodata.age",
+                        occupation: "$biodata.occupation",
+                        permanentDivision: "$biodata.permanentDivision",
+                    }
+                },
+                {
+                    $sample: {
+                        size: count
+                    }
+                },
+            ]).toArray();
+
+            res.send(result);
+        });
+
+        // review collection
+        app.get("/reviews", async (req, res) => {
+            const result = await reviewCollection.find().toArray();
+            res.send(result);
+        });
+
+
+        // payment intent
+        app.post("/create-payment-intent", verifyToken, async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            console.log({ amount });
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card']
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
         });
 
         // check premium pending requests
