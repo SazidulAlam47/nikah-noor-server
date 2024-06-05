@@ -8,7 +8,7 @@ dotenv.config();
 import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 // mongodb
-import { MongoClient, ServerApiVersion } from 'mongodb';
+import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -175,17 +175,27 @@ async function run() {
             res.send(result);
         });
 
-        // TODO : check premium and don't send email and phone numbers
         app.get("/biodatas/:biodataId", verifyToken, async (req, res) => {
             const biodataId = parseInt(req.params.biodataId);
+            const email = req.user?.email;
             const query = { biodataId: biodataId };
             const result = await biodataCollection.findOne(query);
+            // check user admin or premium or self
+            // if not don't send email and phone number
+            const user = await userCollection.findOne({ email: email });
+            if (!(user?.role === 'admin' || user?.premium === 'Approved' || result.contactEmail === email)) {
+                result.contactEmail = "";
+                result.mobileNumber = "";
+            }
             res.send(result);
         });
 
-        // TODO : check premium and don't send email and phone numbers
+        // for getting self biodata
         app.get("/biodatas/email/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
+            if (req.user.email !== email) {
+                return res.status(403).send({ message: 'Forbidden access' });
+            }
             const query = { contactEmail: email };
             const result = await biodataCollection.findOne(query);
             res.send(result);
@@ -268,6 +278,9 @@ async function run() {
 
         app.get("/favorites/email/:email", verifyToken, async (req, res) => {
             const email = req.params.email;
+            if (req.user.email !== email) {
+                return res.status(403).send({ message: 'Forbidden access' });
+            }
 
             const result = await favoriteCollection.aggregate([
                 {
@@ -464,8 +477,114 @@ async function run() {
             res.send(result);
         });
 
-        app.get("/payments", verifyToken, verifyAdmin, async (req, res) => {
-            const result = await paymentCollection.find().toArray();
+        app.get("/payments/user", verifyToken, async (req, res) => {
+            const email = req.user?.email;
+            const response = await paymentCollection.aggregate([
+                {
+                    $match: {
+                        email: email
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "biodatas",
+                        localField: "contactRequestId",
+                        foreignField: "biodataId",
+                        as: "biodata"
+                    }
+                },
+                {
+                    $unwind: "$biodata"
+                },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "email",
+                        foreignField: "email",
+                        as: "user"
+                    }
+                },
+                {
+                    $unwind: "$user"
+                },
+                {
+                    $project: {
+                        status: "$status",
+                        requestedId: "$contactRequestId",
+                        requestedName: "$biodata.name",
+                        requestedEmail: "$biodata.contactEmail",
+                        requestedMobileNumber: "$biodata.mobileNumber",
+                    }
+                }
+            ]).toArray();
+
+            const result = response.map(req => {
+                if (req?.status !== 'Approved') {
+                    req.requestedEmail = "";
+                    req.requestedMobileNumber = "";
+                }
+
+                return req;
+            })
+
+            res.send(result);
+        });
+
+        app.get("/payments/admin", verifyToken, verifyAdmin, async (req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $match: {
+                        status: "Pending"
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "email",
+                        foreignField: "email",
+                        as: "user"
+                    }
+                },
+                {
+                    $unwind: "$user"
+                },
+                {
+                    $project: {
+                        userName: "$user.name",
+                        userEmail: "$email",
+                        requestedId: "$contactRequestId",
+                    }
+                }
+            ]).toArray();
+
+            res.send(result);
+        });
+
+        app.get("/payments/:id", verifyToken, async (req, res) => {
+
+
+            res.send({});
+        });
+
+        // approve request
+        app.get("/payments/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const payment = req.body;
+            console.log(id, payment);
+            const filter = { _id: new ObjectId(id) };
+            const UpdatedPayment = {
+                $set: {
+                    status: "Approved",
+                }
+            };
+            const result = await paymentCollection.updateOne(filter, UpdatedPayment);
+            res.send(result);
+        });
+
+        app.delete("/payments/:id", verifyToken, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await paymentCollection.deleteOne(query);
             res.send(result);
         });
 
@@ -489,8 +608,15 @@ async function run() {
             const femaleBiodata = await biodataCollection.countDocuments({ biodataType: "Female" });
             const premiumBiodata = await userCollection.countDocuments({ premium: "Approved" });
             const totalReview = await reviewCollection.estimatedDocumentCount();
-            //TODO: Revenue
-            res.send({ totalBiodata, maleBiodata, femaleBiodata, premiumBiodata, totalReview });
+            const totalRevenueArry = await paymentCollection.find({}, {
+                projection: {
+                    price: 1,
+                    _id: 0
+                }
+            }).toArray();
+            const totalRevenue = totalRevenueArry.reduce((acc, curr) => acc + curr.price, 0);
+
+            res.send({ totalBiodata, maleBiodata, femaleBiodata, premiumBiodata, totalReview, totalRevenue });
         });
 
 
