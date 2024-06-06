@@ -37,7 +37,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server (optional starting in v4.7)
-        await client.connect(); // TODO: disable on production
+        // await client.connect(); // TODO: disable on production
 
         const database = client.db("nikahNoorDB");
         const biodataCollection = database.collection("biodatas");
