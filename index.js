@@ -349,11 +349,8 @@ async function run() {
         });
 
         // check user admin
-        app.get("/users/admin/:email", verifyToken, async (req, res) => {
-            const email = req.params.email;
-            if (req.user?.email !== email) {
-                return res.status(403).send({ message: 'Forbidden' });
-            }
+        app.get("/users/admin", verifyToken, async (req, res) => {
+            const email = req.user.email;
             const query = { email: email };
             const user = await userCollection.findOne(query);
             const admin = user?.role === "admin";
