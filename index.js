@@ -124,6 +124,9 @@ async function run() {
                     occupation: 1,
                     permanentDivision: 1
                 },
+                sort: {
+                    age: 1
+                }
             };
             const result = await biodataCollection.find(query, options).skip(page * size).limit(size).toArray();
             res.send(result);
@@ -598,7 +601,13 @@ async function run() {
 
         // review collection
         app.get("/reviews", async (req, res) => {
-            const result = await reviewCollection.find().toArray();
+            const query = {};
+            const options = {
+                sort: {
+                    marriageDate: 1
+                }
+            };
+            const result = await reviewCollection.find(query, options).toArray();
             res.send(result);
         });
 
