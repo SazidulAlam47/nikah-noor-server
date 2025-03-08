@@ -9,19 +9,24 @@ import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 // mongodb
 import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
+import SSLCommerzPayment from 'sslcommerz-lts'
 const app = express();
 const port = process.env.PORT || 5000;
+
+const isLive = process.env.STORE_IS_LIVE === 'live';
+const storeId = process.env.STORE_ID;
+const storePassword = process.env.STORE_PASSWORD;
 
 //middleware
 app.use(cors({
     origin: [
-        // "http://localhost:5173", // TODO: add production url
-        "https://nikah-noor-sazidulalam47.vercel.app"
+        process.env.CLIENT_URL
     ],
     credentials: true
 }));
 app.use(express.json());
 app.use(cookieParser());
+app.use(express.urlencoded());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xyqwep0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -36,8 +41,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        // Connect the client to the server (optional starting in v4.7)
-        // await client.connect(); // TODO: disable on production
 
         const database = client.db("nikahNoorDB");
         const biodataCollection = database.collection("biodatas");
@@ -87,8 +90,8 @@ async function run() {
             res
                 .cookie("token", token, {
                     httpOnly: true,
-                    secure: true, // TODO: "true" on production
-                    sameSite: "none", // TODO: uncomment on production
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
                 })
                 .send({ success: true });
         });
@@ -474,6 +477,9 @@ async function run() {
         app.post("/payments", verifyToken, async (req, res) => {
             const payment = req.body;
             console.log(payment);
+            payment.status = "Approved";
+            payment.date = new Date();
+            payment.price = 500;
             const result = await paymentCollection.insertOne(payment);
             res.send(result);
         });
@@ -483,7 +489,9 @@ async function run() {
             const response = await paymentCollection.aggregate([
                 {
                     $match: {
-                        email: email
+                        email: email,
+                        status: "Approved"
+
                     }
                 },
                 {
@@ -554,6 +562,7 @@ async function run() {
                         userName: "$user.name",
                         userEmail: "$email",
                         requestedId: "$contactRequestId",
+                        paymentMethod: "$paymentMethod"
                     }
                 }
             ]).toArray();
@@ -564,14 +573,15 @@ async function run() {
         app.get("/payments/exist/:biodataId", verifyToken, async (req, res) => {
             const biodataId = parseInt(req.params.biodataId);
             const email = req.user?.email;
-            const query = { email: email };
+            const query = { email: email, status: "Approved", contactRequestId: biodataId };
 
-            const response = await paymentCollection.find(query).toArray();
-            const reqIds = response?.map(req => req.contactRequestId);
+            const response = await paymentCollection.findOne(query);
 
-            const exist = reqIds.includes(biodataId);
+            if (!response) {
+                return res.send({ exist: false });
+            }
 
-            res.send({ exist });
+            res.send({ exist: true });
         });
 
         // approve request
@@ -688,11 +698,103 @@ async function run() {
             res.send(result);
         });
 
+        app.post('/init-sslcommerz', (req, res) => {
+
+            const payment = req.body;
+
+            const tran_id = new ObjectId().toString();
+
+            payment.tnxId = tran_id;
+            payment.price = 500;
+            payment.date = new Date();
+            payment.status = "Pending";
+
+            const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+
+            const data = {
+                total_amount: 500,
+                currency: 'BDT',
+                tran_id,
+                success_url: `${apiBaseUrl}/success-payment`,
+                fail_url: `${apiBaseUrl}/payment-failed`,
+                cancel_url: `${apiBaseUrl}/payment-canceled`,
+                ipn_url: `${apiBaseUrl}/ipn-success-payment`,
+                shipping_method: 'Online Delivery',
+                product_name: 'BioData information',
+                product_category: 'Biodata',
+                product_profile: 'general',
+                cus_name: 'User Name',
+                cus_email: payment.email,
+                cus_add1: 'Dhaka',
+                cus_add2: 'Dhaka',
+                cus_city: 'Dhaka',
+                cus_state: 'Dhaka',
+                cus_postcode: '1000',
+                cus_country: 'Bangladesh',
+                cus_phone: '01711111111',
+                cus_fax: '01711111111',
+                ship_name: 'User Name',
+                ship_add1: 'Dhaka',
+                ship_add2: 'Dhaka',
+                ship_city: 'Dhaka',
+                ship_state: 'Dhaka',
+                ship_postcode: 1100,
+                ship_country: 'Bangladesh',
+            };
+
+            const sslcz = new SSLCommerzPayment(storeId, storePassword, isLive);
+            sslcz.init(data).then(async (apiResponse) => {
+                // Redirect the user to payment gateway
+                console.log(apiResponse)
+                let GatewayPageURL = apiResponse.GatewayPageURL;
+                await paymentCollection.insertOne(payment);
+                console.log('Redirecting to: ', GatewayPageURL);
+                res.json({ url: GatewayPageURL });
+            });
+        });
+
+        //sslcommerz validation 
+        app.post('/success-payment', (req, res) => {
+            console.log(req.body);
+            const { val_id } = req.body;
+            const data = {
+                val_id
+            };
+            const sslcz = new SSLCommerzPayment(storeId, storePassword, isLive)
+            sslcz.validate(data).then(async (data) => {
+
+                if (data.status !== 'VALID') {
+                    return res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-failed`);
+                }
+
+                const filter = { tnxId: data.tran_id };
+                const UpdatedPayment = {
+                    $set: {
+                        status: "Approved",
+                        paymentMethod: data.card_issuer
+                    }
+                };
+                await paymentCollection.updateOne(filter, UpdatedPayment);
+
+                res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-success`);
+
+            });
+        })
+
+        app.post('/payment-canceled', (req, res) => {
+            res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-canceled`);
+        })
+
+        app.post('/payment-failed', (req, res) => {
+            res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-failed`);
+        })
 
 
         // Send a ping to confirm a successful connection
-        // await client.db("admin").command({ ping: 1 }); // TODO: disable on production
-        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        if (process.env.NODE_ENV === 'development') {
+            await client.db("admin").command({ ping: 1 });
+            console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        }
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();

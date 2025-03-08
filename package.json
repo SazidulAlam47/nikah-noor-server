@@ -19,6 +19,7 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.7.0",
+    "sslcommerz-lts": "^1.1.0",
     "stripe": "^15.9.0"
   }
 }
