@@ -709,7 +709,8 @@ async function run() {
             payment.date = new Date();
             payment.status = "Pending";
 
-            const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+            const protocol = process.env.NODE_ENV === 'production' ? "https" : "http";
+            const apiBaseUrl = `${protocol}://${req.get('host')}`;
 
             const data = {
                 total_amount: 500,
