@@ -490,8 +490,6 @@ async function run() {
                 {
                     $match: {
                         email: email,
-                        status: "Approved"
-
                     }
                 },
                 {
@@ -523,6 +521,7 @@ async function run() {
                         requestedName: "$biodata.name",
                         requestedEmail: "$biodata.contactEmail",
                         requestedMobileNumber: "$biodata.mobileNumber",
+                        paymentMethod: '$paymentMethod'
                     }
                 }
             ]).toArray();
@@ -542,11 +541,6 @@ async function run() {
         app.get("/payments/admin", verifyToken, verifyAdmin, async (req, res) => {
             const result = await paymentCollection.aggregate([
                 {
-                    $match: {
-                        status: "Pending"
-                    }
-                },
-                {
                     $lookup: {
                         from: "users",
                         localField: "email",
@@ -562,7 +556,8 @@ async function run() {
                         userName: "$user.name",
                         userEmail: "$email",
                         requestedId: "$contactRequestId",
-                        paymentMethod: "$paymentMethod"
+                        paymentMethod: "$paymentMethod",
+                        status: '$status'
                     }
                 }
             ]).toArray();
@@ -599,7 +594,7 @@ async function run() {
             res.send(result);
         });
 
-        app.delete("/payments/:id", verifyToken, async (req, res) => {
+        app.delete("/payments/:id", verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await paymentCollection.deleteOne(query);
@@ -698,7 +693,7 @@ async function run() {
             res.send(result);
         });
 
-        app.post('/init-sslcommerz', (req, res) => {
+        app.post('/init-sslcommerz', async (req, res) => {
 
             const payment = req.body;
 
@@ -708,6 +703,8 @@ async function run() {
             payment.price = 500;
             payment.date = new Date();
             payment.status = "Pending";
+
+            await paymentCollection.insertOne(payment);
 
             const protocol = process.env.NODE_ENV === 'production' ? "https" : "http";
             const apiBaseUrl = `${protocol}://${req.get('host')}`;
@@ -744,11 +741,9 @@ async function run() {
             };
 
             const sslcz = new SSLCommerzPayment(storeId, storePassword, isLive);
-            sslcz.init(data).then(async (apiResponse) => {
+            sslcz.init(data).then((apiResponse) => {
                 // Redirect the user to payment gateway
-                console.log(apiResponse)
                 let GatewayPageURL = apiResponse.GatewayPageURL;
-                await paymentCollection.insertOne(payment);
                 console.log('Redirecting to: ', GatewayPageURL);
                 res.json({ url: GatewayPageURL });
             });
@@ -756,7 +751,6 @@ async function run() {
 
         //sslcommerz validation 
         app.post('/success-payment', (req, res) => {
-            console.log(req.body);
             const { val_id } = req.body;
             const data = {
                 val_id
@@ -765,7 +759,7 @@ async function run() {
             sslcz.validate(data).then(async (data) => {
 
                 if (data.status !== 'VALID') {
-                    return res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-failed`);
+                    return res.json({ message: "Invalid request" });
                 }
 
                 const filter = { tnxId: data.tran_id };
@@ -782,11 +776,34 @@ async function run() {
             });
         })
 
-        app.post('/payment-canceled', (req, res) => {
+        app.post('/payment-canceled', async (req, res) => {
+            const { tran_id, status } = req.body;
+            if (status !== 'CANCELLED') {
+                return res.json({ message: "Invalid request" });
+            }
+            const filter = { tnxId: tran_id };
+            const UpdatedPayment = {
+                $set: {
+                    status: "Canceled",
+                }
+            };
+            await paymentCollection.updateOne(filter, UpdatedPayment);
             res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-canceled`);
         })
 
-        app.post('/payment-failed', (req, res) => {
+        app.post('/payment-failed', async (req, res) => {
+            const { tran_id, status, card_issuer } = req.body;
+            if (status !== 'FAILED') {
+                return res.json({ message: "Invalid request" });
+            }
+            const filter = { tnxId: tran_id };
+            const UpdatedPayment = {
+                $set: {
+                    status: "Failed",
+                    paymentMethod: card_issuer
+                }
+            };
+            await paymentCollection.updateOne(filter, UpdatedPayment);
             res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-failed`);
         })
 
