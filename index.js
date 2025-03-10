@@ -557,7 +557,13 @@ async function run() {
                         userEmail: "$email",
                         requestedId: "$contactRequestId",
                         paymentMethod: "$paymentMethod",
-                        status: '$status'
+                        status: '$status',
+                        date: '$date'
+                    }
+                },
+                {
+                    $sort: {
+                        date: -1
                     }
                 }
             ]).toArray();
