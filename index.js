@@ -793,6 +793,10 @@ async function run() {
                     status: "Canceled",
                 }
             };
+            const payment = await paymentCollection.findOne(filter);
+            if (payment.status !== "Pending") {
+                return res.json({ message: "Invalid request" });
+            }
             await paymentCollection.updateOne(filter, UpdatedPayment);
             res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-canceled`);
         })
@@ -809,6 +813,10 @@ async function run() {
                     paymentMethod: card_issuer
                 }
             };
+            const payment = await paymentCollection.findOne(filter);
+            if (payment.status !== "Pending") {
+                return res.json({ message: "Invalid request" });
+            }
             await paymentCollection.updateOne(filter, UpdatedPayment);
             res.redirect(`${process.env.CLIENT_URL}/dashboard/payment-failed`);
         })
